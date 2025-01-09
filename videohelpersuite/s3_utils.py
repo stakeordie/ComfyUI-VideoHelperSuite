@@ -41,13 +41,14 @@ class S3Handler:
             region_name=region
         )
 
-    def upload_file(self, file_path: str, s3_prefix: Optional[str] = None) -> Tuple[bool, str]:
+    def upload_file(self, file_path: str, s3_prefix: Optional[str] = None, index: Optional[int] = None) -> Tuple[bool, str]:
         """
         Upload a file to S3 bucket
         
         Args:
             file_path: Local path to the file
             s3_prefix: Optional prefix (folder) in S3 bucket
+            index: Optional index for multiple files
             
         Returns:
             Tuple of (success: bool, url: str)
@@ -59,8 +60,19 @@ class S3Handler:
             # Get the filename from the path
             filename = os.path.basename(file_path)
             
+            # Handle multiple files by adding index to filename if provided
+            if index is not None:
+                base, ext = os.path.splitext(filename)
+                filename = f"{base}_{index}{ext}"
+            
+            # Ensure prefix ends with '/' and doesn't start with '/'
+            if s3_prefix:
+                s3_prefix = s3_prefix.rstrip('/') + '/'
+                if s3_prefix.startswith('/'):
+                    s3_prefix = s3_prefix[1:]
+            
             # Construct the S3 key (path in bucket)
-            s3_key = f"{s3_prefix.rstrip('/')}/{filename}" if s3_prefix else filename
+            s3_key = f"{s3_prefix}{filename}" if s3_prefix else filename
             
             print(f"Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
             
@@ -93,4 +105,5 @@ class S3Handler:
         if not isinstance(file_paths, list):
             raise ValueError(f"Expected list of file paths, got {type(file_paths)}")
             
-        return [self.upload_file(file_path, s3_prefix) for file_path in file_paths]
+        return [self.upload_file(file_path, s3_prefix, index=i if len(file_paths) > 1 else None) 
+                for i, file_path in enumerate(file_paths)]
