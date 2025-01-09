@@ -578,8 +578,15 @@ class VideoCombine:
             previews[0]['filename'] = file.replace('%03d', '001')
         if save_output and s3_prefix:
             try:
+                print(f"Attempting to upload files: {output_files}")
+                # Ensure we have valid file paths
+                valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
+                if not valid_files:
+                    print("No valid files found to upload")
+                    return ((save_output, output_files),)
+                
                 s3_handler = S3Handler()
-                upload_results = s3_handler.upload_files(output_files, s3_prefix)
+                upload_results = s3_handler.upload_files(valid_files, s3_prefix)
                 
                 # Add S3 URLs to metadata
                 successful_urls = [url for success, url in upload_results if success]
@@ -587,8 +594,11 @@ class VideoCombine:
                     print(f"Files uploaded to S3: {successful_urls}")
             except Exception as e:
                 print(f"Error uploading to S3: {str(e)}")
+                print(f"Error type: {type(e)}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
 
-        return {"ui": {"gifs": [preview]}, "result": ((save_output, output_files),)}
+        return ((save_output, output_files),)
     @classmethod
     def VALIDATE_INPUTS(self, format, **kwargs):
         return True
