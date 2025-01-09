@@ -8,37 +8,38 @@ def _process_secret_key(secret_key: str) -> str:
 
 class S3Handler:
     def __init__(self):
-        # Log environment variables (safely)
+        self.bucket_name = "emprops-share"
+        
+        # First try system environment
         access_key = os.getenv('AWS_ACCESS_KEY_ID')
         secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-        region = os.getenv('AWS_REGION')
-        bucket = os.getenv('S3_BUCKET_NAME')
+        region = os.getenv('AWS_DEFAULT_REGION')
+
+        # Try encoded secret key if regular one not found
+        if not secret_key:
+            secret_key = os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED')
+            if secret_key:
+                secret_key = _process_secret_key(secret_key)
         
         print(f"[S3Handler] Environment variables:")
         print(f"AWS_ACCESS_KEY_ID: {'*' * len(access_key) if access_key else 'Not set'}")
         print(f"AWS_SECRET_ACCESS_KEY: {'*' * len(secret_key) if secret_key else 'Not set'}")
-        print(f"AWS_REGION: {region if region else 'Not set'}")
-        print(f"S3_BUCKET_NAME: {bucket if bucket else 'Not set'}")
+        print(f"AWS_DEFAULT_REGION: {region if region else 'Not set'}")
+        print(f"S3_BUCKET_NAME: {self.bucket_name}")
         
-        # Process secret key
-        processed_secret = _process_secret_key(secret_key)
-        print(f"Processed secret key length: {len(processed_secret) if processed_secret else 0}")
+        if not all([access_key, secret_key, region]):
+            missing = []
+            if not access_key: missing.append('AWS_ACCESS_KEY_ID')
+            if not secret_key: missing.append('AWS_SECRET_ACCESS_KEY')
+            if not region: missing.append('AWS_DEFAULT_REGION')
+            raise ValueError(f"Missing required AWS environment variables: {', '.join(missing)}")
         
         self.s3_client = boto3.client(
             's3',
             aws_access_key_id=access_key,
-            aws_secret_access_key=processed_secret,
+            aws_secret_access_key=secret_key,
             region_name=region
         )
-        self.bucket_name = bucket
-        
-        if not all([access_key, secret_key, region, bucket]):
-            missing = []
-            if not access_key: missing.append('AWS_ACCESS_KEY_ID')
-            if not secret_key: missing.append('AWS_SECRET_ACCESS_KEY')
-            if not region: missing.append('AWS_REGION')
-            if not bucket: missing.append('S3_BUCKET_NAME')
-            raise ValueError(f"Missing required AWS environment variables: {', '.join(missing)}")
 
     def upload_file(self, file_path: str, s3_prefix: Optional[str] = None) -> Tuple[bool, str]:
         """
