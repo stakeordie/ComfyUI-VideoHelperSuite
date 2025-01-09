@@ -1,3 +1,9 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from .videohelpersuite.nodes import NODE_CLASS_MAPPINGS as BASE_NODE_CLASS_MAPPINGS
 from .videohelpersuite.nodes import NODE_DISPLAY_NAME_MAPPINGS as BASE_NODE_DISPLAY_NAME_MAPPINGS
 from .videohelpersuite.emprops_nodes import EmProps_VideoCombine
