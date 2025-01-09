@@ -2,16 +2,21 @@ import os
 import boto3
 from typing import Optional, Tuple, List
 
+def _process_secret_key(secret_key: str) -> str:
+    """Process AWS secret key by replacing _SLASH_ with /"""
+    return secret_key.replace('_SLASH_', '/') if secret_key else ''
+
 class S3Handler:
     def __init__(self):
+        secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
         self.s3_client = boto3.client(
             's3',
             aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            aws_secret_access_key=_process_secret_key(secret_key),
             region_name=os.getenv('AWS_REGION')
         )
         self.bucket_name = os.getenv('S3_BUCKET_NAME')
-        if not all([os.getenv('AWS_ACCESS_KEY_ID'), os.getenv('AWS_SECRET_ACCESS_KEY'), 
+        if not all([os.getenv('AWS_ACCESS_KEY_ID'), secret_key, 
                    os.getenv('AWS_REGION'), os.getenv('S3_BUCKET_NAME')]):
             raise ValueError("Missing required AWS environment variables")
 
