@@ -569,7 +569,7 @@ class VideoCombine:
         preview = {
                 "filename": file,
                 "subfolder": subfolder,
-                "type": "output" if save_output else "temp",
+                "type": "output",
                 "format": format,
                 "frame_rate": frame_rate,
                 "workflow": first_image_file,
@@ -581,7 +581,7 @@ class VideoCombine:
 
         previews = [preview]
         
-        if save_output and s3_prefix:
+        if s3_prefix:
             try:
                 print(f"Attempting to upload files: {output_files}")
                 # Ensure we have valid file paths

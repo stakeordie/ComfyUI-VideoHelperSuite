@@ -75,16 +75,21 @@ class S3Handler:
         """Verify that a file exists in S3 by checking with head_object"""
         import time
         
+        print(f"[S3Handler] Starting verification for s3://{bucket}/{key}")
         for attempt in range(max_attempts):
             try:
-                self.s3_client.head_object(Bucket=bucket, Key=key)
+                response = self.s3_client.head_object(Bucket=bucket, Key=key)
+                print(f"[S3Handler] File verified in S3: s3://{bucket}/{key}")
+                print(f"[S3Handler] File size: {response.get('ContentLength', 'unknown')} bytes")
                 return True
             except Exception as e:
                 if attempt < max_attempts - 1:
                     print(f"[S3Handler] Waiting for S3 file to be available... attempt {attempt + 1}/{max_attempts}")
+                    print(f"[S3Handler] Last error: {str(e)}")
                     time.sleep(delay)
                 else:
-                    print(f"[S3Handler] Warning: Could not verify S3 upload: {str(e)}")
+                    print(f"[S3Handler] Could not verify S3 upload after {max_attempts} attempts")
+                    print(f"[S3Handler] Final error: {str(e)}")
                     return False
         return False
 
@@ -102,6 +107,7 @@ class S3Handler:
         """
         try:
             if not os.path.exists(file_path):
+                print(f"[S3Handler] File not found: {file_path}")
                 raise FileNotFoundError(f"File not found: {file_path}")
                 
             # Get the filename from the path
@@ -121,7 +127,7 @@ class S3Handler:
             # Construct the S3 key (path in bucket)
             s3_key = f"{s3_prefix}{filename}" if s3_prefix else filename
             
-            print(f"Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
+            print(f"[S3Handler] Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
             
             # Upload the file
             self.s3_client.upload_file(
@@ -129,6 +135,7 @@ class S3Handler:
                 Bucket=self.bucket_name,
                 Key=s3_key
             )
+            print(f"[S3Handler] Upload completed, verifying...")
             
             # Verify the upload
             if not self.verify_s3_upload(self.bucket_name, s3_key):
@@ -136,10 +143,11 @@ class S3Handler:
             
             # Generate the URL
             url = f"https://{self.bucket_name}.s3.amazonaws.com/{s3_key}"
+            print(f"[S3Handler] File available at: {url}")
             
             return True, url
         except Exception as e:
-            print(f"Error uploading {file_path} to S3: {str(e)}")
+            print(f"[S3Handler] Error uploading {file_path} to S3: {str(e)}")
             return False, str(e)
 
     def upload_files(self, file_paths: List[str], s3_prefix: Optional[str] = None) -> List[Tuple[bool, str]]:
