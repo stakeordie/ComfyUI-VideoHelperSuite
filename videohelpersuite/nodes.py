@@ -213,8 +213,8 @@ class VideoCombine:
             "required": {
                 "images": (imageOrLatent,),
                 "frame_rate": (
-                    "FLOAT",
-                    {"default": 8, "min": 1, "step": 1},
+                    "INT",
+                    {"default": 8, "min": 1, "max": 240, "step": 1},
                 ),
                 "loop_count": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
                 "filename_prefix": ("STRING", {"default": "AnimateDiff"}),
@@ -222,6 +222,7 @@ class VideoCombine:
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_output": ("BOOLEAN", {"default": True}),
                 "s3_prefix": ("STRING", {"default": ""}),
+                "s3_bucket": ("STRING", {"default": "emprops-share"}),
             },
             "optional": {
                 "audio": ("AUDIO",),
@@ -252,6 +253,7 @@ class VideoCombine:
         pingpong=False,
         save_output=True,
         s3_prefix="",
+        s3_bucket="emprops-share",
         prompt=None,
         extra_pnginfo=None,
         audio=None,
@@ -585,7 +587,7 @@ class VideoCombine:
                     print("No valid files found to upload")
                     return ((save_output, output_files),)
                 
-                s3_handler = S3Handler()
+                s3_handler = S3Handler(bucket_name=s3_bucket)
                 upload_results = s3_handler.upload_files(valid_files, s3_prefix)
                 
                 # Add S3 URLs to metadata

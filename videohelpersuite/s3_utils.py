@@ -1,14 +1,15 @@
 import os
 import boto3
 from typing import Optional, Tuple, List
+from dotenv import load_dotenv
 
 def _process_secret_key(secret_key: str) -> str:
     """Process AWS secret key by replacing _SLASH_ with /"""
     return secret_key.replace('_SLASH_', '/') if secret_key else ''
 
 class S3Handler:
-    def __init__(self):
-        self.bucket_name = "emprops-share"
+    def __init__(self, bucket_name: Optional[str] = None):
+        self.bucket_name = bucket_name or "emprops-share"
         
         # First try system environment
         access_key = os.getenv('AWS_ACCESS_KEY_ID')
@@ -20,6 +21,36 @@ class S3Handler:
             secret_key = os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED')
             if secret_key:
                 secret_key = _process_secret_key(secret_key)
+
+        # If not found, try .env and .env.local files
+        if not access_key or not secret_key or not region:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Try .env first
+            env_path = os.path.join(current_dir, '.env')
+            if os.path.exists(env_path):
+                print("[S3Handler] Loading .env from: " + env_path)
+                load_dotenv(env_path)
+                secret_key = secret_key or _process_secret_key(os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED', ''))
+                if not secret_key:
+                    secret_key = secret_key or os.getenv('AWS_SECRET_ACCESS_KEY', '')
+                access_key = access_key or os.getenv('AWS_ACCESS_KEY_ID', '')
+                region = region or os.getenv('AWS_DEFAULT_REGION', '')
+            
+            # If still not found, try .env.local
+            if not access_key or not secret_key or not region:
+                env_local_path = os.path.join(current_dir, '.env.local')
+                if os.path.exists(env_local_path):
+                    print("[S3Handler] Loading .env.local from: " + env_local_path)
+                    load_dotenv(env_local_path)
+                    secret_key = secret_key or _process_secret_key(os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED', ''))
+                    if not secret_key:
+                        secret_key = secret_key or os.getenv('AWS_SECRET_ACCESS_KEY', '')
+                    access_key = access_key or os.getenv('AWS_ACCESS_KEY_ID', '')
+                    region = region or os.getenv('AWS_DEFAULT_REGION', '')
+        
+        # Set default region if still not set
+        region = region or 'us-east-1'
         
         print(f"[S3Handler] Environment variables:")
         print(f"AWS_ACCESS_KEY_ID: {'*' * len(access_key) if access_key else 'Not set'}")
@@ -27,11 +58,10 @@ class S3Handler:
         print(f"AWS_DEFAULT_REGION: {region if region else 'Not set'}")
         print(f"S3_BUCKET_NAME: {self.bucket_name}")
         
-        if not all([access_key, secret_key, region]):
+        if not all([access_key, secret_key]):
             missing = []
             if not access_key: missing.append('AWS_ACCESS_KEY_ID')
             if not secret_key: missing.append('AWS_SECRET_ACCESS_KEY')
-            if not region: missing.append('AWS_DEFAULT_REGION')
             raise ValueError(f"Missing required AWS environment variables: {', '.join(missing)}")
         
         self.s3_client = boto3.client(
