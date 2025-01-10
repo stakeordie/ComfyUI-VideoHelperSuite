@@ -90,7 +90,7 @@ class S3Handler:
                     raise e
         return False
 
-    def upload_file(self, file_path: str, s3_prefix: Optional[str] = None, index: Optional[int] = None) -> Tuple[bool, str]:
+    def upload_file(self, file_path: str, s3_prefix: Optional[str] = None, index: Optional[int] = None, target_name: Optional[str] = None) -> Tuple[bool, str]:
         """
         Upload a file to S3 bucket
         
@@ -98,6 +98,7 @@ class S3Handler:
             file_path: Local path to the file
             s3_prefix: Optional prefix (folder) in S3 bucket
             index: Optional index for multiple files
+            target_name: Optional target filename to use instead of the source filename
             
         Returns:
             Tuple of (success: bool, url: str)
@@ -107,11 +108,11 @@ class S3Handler:
                 # print(f"[S3Handler] File not found: {file_path}")
                 return False, f"File not found: {file_path}"
                 
-            # Get the filename from the path
-            filename = os.path.basename(file_path)
+            # Get the filename - either target_name or from the path
+            filename = target_name if target_name else os.path.basename(file_path)
             
             # Handle multiple files by adding index to filename if provided
-            if index is not None:
+            if index is not None and not target_name:  # Don't modify target_name with index
                 base, ext = os.path.splitext(filename)
                 filename = f"{base}_{index}{ext}"
             
