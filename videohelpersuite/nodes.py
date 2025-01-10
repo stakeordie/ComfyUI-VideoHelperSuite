@@ -329,13 +329,19 @@ class VideoCombine:
             if save_output
             else folder_paths.get_temp_directory()
         )
+
+        # For local save, strip any extension from filename_prefix
+        local_filename_prefix = filename_prefix
+        if '.' in os.path.basename(filename_prefix):
+            local_filename_prefix = os.path.splitext(filename_prefix)[0]
+
         (
             full_output_folder,
             filename,
             _,
             subfolder,
             _,
-        ) = folder_paths.get_save_image_path(filename_prefix, output_dir)
+        ) = folder_paths.get_save_image_path(local_filename_prefix, output_dir)
         output_files = []
 
         metadata = PngInfo()
@@ -597,36 +603,35 @@ class VideoCombine:
                 "frame_rate": frame_rate,
                 "workflow": first_image_file
             }
+
+        if s3_prefix and use_s3_upload:
+            try:
+                # Only upload the video file (not the PNG thumbnail)
+                video_file = output_files[-1]  # Last file is the video
+                if isinstance(video_file, str) and os.path.exists(video_file):
+                    s3_handler = S3Handler(bucket_name=s3_bucket)
+                    
+                    # Use exact filename from input
+                    s3_filename = os.path.basename(filename_prefix)
+                    # If filename doesn't have extension, add it from format
+                    if '.' not in s3_filename:
+                        ext = video_file.split('.')[-1]
+                        s3_filename = f"{s3_filename}.{ext}"
+                    
+                    success, url = s3_handler.upload_file(video_file, s3_prefix)
+                    if success:
+                        preview["s3_urls"] = [url]
+                    else:
+                        print(f"Failed to upload to S3: {url}")
+            except Exception as e:
+                print(f"[VideoCombine] Error uploading to S3: {str(e)}")
+
         logger.info(f"Preview data being sent: {preview}")
         logger.info(f"Original format: {format}, Converted MIME type: {get_mime_type(format)}")
         logger.info(f"Output file path: {output_files[-1]}")
         logger.info(f"File exists check: {os.path.exists(output_files[-1])}")
         previews = [preview]
-        
-        if s3_prefix and use_s3_upload:
-            try:
-                # print(f"[VideoCombine] Attempting to upload files: {output_files}")
-                # Ensure we have valid file paths
-                valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
-                if not valid_files:
-                    # print("[VideoCombine] No valid files found to upload")
-                    return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
-                
-                s3_handler = S3Handler(bucket_name=s3_bucket)
-                upload_results = s3_handler.upload_files(valid_files, s3_prefix)
-                
-                # Add S3 URLs to metadata
-                successful_urls = [url for success, url in upload_results if success]
-                if successful_urls:
-                    # print(f"[VideoCombine] Files uploaded to S3: {successful_urls}")
-                    # Add S3 URLs to preview info
-                    preview["s3_urls"] = successful_urls
-            except Exception as e:
-                # print(f"[VideoCombine] Error uploading to S3: {str(e)}")
-                # print(f"[VideoCombine] Error type: {type(e)}")
-                import traceback
-                # print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
-        
+
         return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
     @classmethod
     def VALIDATE_INPUTS(self, format, **kwargs):
