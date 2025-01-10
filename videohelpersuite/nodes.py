@@ -26,6 +26,27 @@ from .utils import ffmpeg_path, get_audio, hash_path, validate_path, requeue_wor
 from comfy.utils import ProgressBar
 from .s3_utils import S3Handler
 
+MIME_TYPE_MAPPING = {
+    # Video formats
+    'video/h265-mp4': 'video/mp4',
+    'video/h264-mp4': 'video/mp4',
+    'video/nvenc_h264-mp4': 'video/mp4',
+    'video/nvenc_hevc-mp4': 'video/mp4',
+    'video/webm': 'video/webm',
+    'video/av1-webm': 'video/webm',
+    'video/ProRes': 'video/quicktime',
+    'video/ffmpeg-gif': 'image/gif',
+    # Image formats
+    'video/16bit-png': 'image/png',
+    'video/8bit-png': 'image/png',
+    'image/gif': 'image/gif',
+    'image/webp': 'image/webp'
+}
+
+def get_mime_type(format_str):
+    """Convert internal format string to standard MIME type"""
+    return MIME_TYPE_MAPPING.get(format_str, format_str)
+
 folder_paths.folder_names_and_paths["VHS_video_formats"] = (
     [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "video_formats"),
@@ -570,7 +591,7 @@ class VideoCombine:
                 "filename": file,
                 "subfolder": subfolder,
                 "type": "output",
-                "format": format,
+                "format": get_mime_type(format),  # Use MIME type mapping
                 "frame_rate": frame_rate,
                 "workflow": first_image_file,
                 "fullpath": output_files[-1],
@@ -578,16 +599,15 @@ class VideoCombine:
         if num_frames == 1 and 'png' in format and '%03d' in file:
             preview['format'] = 'image/png'
             preview['filename'] = file.replace('%03d', '001')
-
         previews = [preview]
         
         if s3_prefix:
             try:
-                print(f"Attempting to upload files: {output_files}")
+                print(f"[VideoCombine] Attempting to upload files: {output_files}")
                 # Ensure we have valid file paths
                 valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
                 if not valid_files:
-                    print("No valid files found to upload")
+                    print("[VideoCombine] No valid files found to upload")
                     return {"ui": {"images": previews}, "result": ((save_output, output_files),)}
                 
                 s3_handler = S3Handler(bucket_name=s3_bucket)
@@ -596,14 +616,14 @@ class VideoCombine:
                 # Add S3 URLs to metadata
                 successful_urls = [url for success, url in upload_results if success]
                 if successful_urls:
-                    print(f"Files uploaded to S3: {successful_urls}")
+                    print(f"[VideoCombine] Files uploaded to S3: {successful_urls}")
                     # Add S3 URLs to preview info
                     preview["s3_urls"] = successful_urls
             except Exception as e:
-                print(f"Error uploading to S3: {str(e)}")
-                print(f"Error type: {type(e)}")
+                print(f"[VideoCombine] Error uploading to S3: {str(e)}")
+                print(f"[VideoCombine] Error type: {type(e)}")
                 import traceback
-                print(f"Traceback: {traceback.format_exc()}")
+                print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
         
         return {"ui": {"images": previews}, "result": ((save_output, output_files),)}
     @classmethod
