@@ -29,7 +29,6 @@ class S3Handler:
             # Try .env first
             env_path = os.path.join(current_dir, '.env')
             if os.path.exists(env_path):
-                print("[S3Handler] Loading .env from: " + env_path)
                 load_dotenv(env_path)
                 secret_key = secret_key or _process_secret_key(os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED', ''))
                 if not secret_key:
@@ -41,7 +40,6 @@ class S3Handler:
             if not access_key or not secret_key or not region:
                 env_local_path = os.path.join(current_dir, '.env.local')
                 if os.path.exists(env_local_path):
-                    print("[S3Handler] Loading .env.local from: " + env_local_path)
                     load_dotenv(env_local_path)
                     secret_key = secret_key or _process_secret_key(os.getenv('AWS_SECRET_ACCESS_KEY_ENCODED', ''))
                     if not secret_key:
@@ -52,11 +50,11 @@ class S3Handler:
         # Set default region if still not set
         region = region or 'us-east-1'
         
-        print(f"[S3Handler] Environment variables:")
-        print(f"AWS_ACCESS_KEY_ID: {'*' * len(access_key) if access_key else 'Not set'}")
-        print(f"AWS_SECRET_ACCESS_KEY: {'*' * len(secret_key) if secret_key else 'Not set'}")
-        print(f"AWS_DEFAULT_REGION: {region if region else 'Not set'}")
-        print(f"S3_BUCKET_NAME: {self.bucket_name}")
+        # print(f"[S3Handler] Environment variables:")
+        # print(f"AWS_ACCESS_KEY_ID: {'*' * len(access_key) if access_key else 'Not set'}")
+        # print(f"AWS_SECRET_ACCESS_KEY: {'*' * len(secret_key) if secret_key else 'Not set'}")
+        # print(f"AWS_DEFAULT_REGION: {region if region else 'Not set'}")
+        # print(f"S3_BUCKET_NAME: {self.bucket_name}")
         
         if not all([access_key, secret_key]):
             missing = []
@@ -75,22 +73,20 @@ class S3Handler:
         """Verify that a file exists in S3 by checking with head_object"""
         import time
         
-        print(f"[S3Handler] Starting verification for s3://{bucket}/{key}")
+        # print(f"[S3Handler] Starting verification for s3://{bucket}/{key}")
         for attempt in range(max_attempts):
             try:
                 response = self.s3_client.head_object(Bucket=bucket, Key=key)
-                print(f"[S3Handler] File verified in S3: s3://{bucket}/{key}")
-                print(f"[S3Handler] File size: {response.get('ContentLength', 'unknown')} bytes")
+                # print(f"[S3Handler] File verified in S3: s3://{bucket}/{key}")
+                # print(f"[S3Handler] File size: {response.get('ContentLength', 'unknown')} bytes")
                 return True
             except Exception as e:
                 if attempt < max_attempts - 1:
-                    print(f"[S3Handler] Waiting for S3 file to be available... attempt {attempt + 1}/{max_attempts}")
-                    # print(f"[S3Handler] Last error: {str(e)}")
+                    # print(f"[S3Handler] Waiting for S3 file to be available... attempt {attempt + 1}/{max_attempts}")
                     last_error = e
                     time.sleep(delay)
                 else:
-                    print(f"[S3Handler] Could not verify S3 upload after {max_attempts} attempts")
-                    # print(f"[S3Handler] Final error: {str(e)}")
+                    # print(f"[S3Handler] Could not verify S3 upload after {max_attempts} attempts")
                     raise e
         return False
 
@@ -108,8 +104,8 @@ class S3Handler:
         """
         try:
             if not os.path.exists(file_path):
-                print(f"[S3Handler] File not found: {file_path}")
-                raise FileNotFoundError(f"File not found: {file_path}")
+                # print(f"[S3Handler] File not found: {file_path}")
+                return False, f"File not found: {file_path}"
                 
             # Get the filename from the path
             filename = os.path.basename(file_path)
@@ -128,7 +124,7 @@ class S3Handler:
             # Construct the S3 key (path in bucket)
             s3_key = f"{s3_prefix}{filename}" if s3_prefix else filename
             
-            print(f"[S3Handler] Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
+            # print(f"[S3Handler] Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
             
             # Upload the file
             self.s3_client.upload_file(
@@ -136,7 +132,7 @@ class S3Handler:
                 Bucket=self.bucket_name,
                 Key=s3_key
             )
-            print(f"[S3Handler] Upload completed, verifying...")
+            # print(f"[S3Handler] Upload completed, verifying...")
             
             # Verify the upload
             if not self.verify_s3_upload(self.bucket_name, s3_key):
@@ -144,7 +140,7 @@ class S3Handler:
             
             # Generate the URL
             url = f"https://{self.bucket_name}.s3.amazonaws.com/{s3_key}"
-            print(f"[S3Handler] File available at: {url}")
+            # print(f"[S3Handler] File available at: {url}")
             
             return True, url
         except Exception as e:
