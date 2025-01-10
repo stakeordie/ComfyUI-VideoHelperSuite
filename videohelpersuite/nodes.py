@@ -591,14 +591,15 @@ class VideoCombine:
                 "filename": file,
                 "subfolder": subfolder,
                 "type": "output",
-                "format": get_mime_type(format),  # Use MIME type mapping
+                "format": get_mime_type(format),
                 "frame_rate": frame_rate,
                 "workflow": first_image_file,
                 "fullpath": output_files[-1],
             }
-        if num_frames == 1 and 'png' in format and '%03d' in file:
-            preview['format'] = 'image/png'
-            preview['filename'] = file.replace('%03d', '001')
+        logger.info(f"Preview data being sent: {preview}")
+        logger.info(f"Original format: {format}, Converted MIME type: {get_mime_type(format)}")
+        logger.info(f"Output file path: {output_files[-1]}")
+        logger.info(f"File exists check: {os.path.exists(output_files[-1])}")
         previews = [preview]
         
         if s3_prefix:
