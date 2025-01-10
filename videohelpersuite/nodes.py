@@ -24,6 +24,28 @@ from .utils import ffmpeg_path, get_audio, hash_path, validate_path, requeue_wor
         gifski_path, calculate_file_hash, strip_path, try_download_video, is_url, \
         imageOrLatent, BIGMAX, merge_filter_args, ENCODE_ARGS
 from comfy.utils import ProgressBar
+from .s3_utils import S3Handler
+
+MIME_TYPE_MAPPING = {
+    # Video formats
+    'video/h265-mp4': 'video/mp4',
+    'video/h264-mp4': 'video/mp4',
+    'video/nvenc_h264-mp4': 'video/mp4',
+    'video/nvenc_hevc-mp4': 'video/mp4',
+    'video/webm': 'video/webm',
+    'video/av1-webm': 'video/webm',
+    'video/ProRes': 'video/quicktime',
+    'video/ffmpeg-gif': 'image/gif',
+    # Image formats
+    'video/16bit-png': 'image/png',
+    'video/8bit-png': 'image/png',
+    'image/gif': 'image/gif',
+    'image/webp': 'image/webp'
+}
+
+def get_mime_type(format_str):
+    """Convert internal format string to standard MIME type"""
+    return MIME_TYPE_MAPPING.get(format_str, format_str)
 
 folder_paths.folder_names_and_paths["VHS_video_formats"] = (
     [
@@ -212,14 +234,17 @@ class VideoCombine:
             "required": {
                 "images": (imageOrLatent,),
                 "frame_rate": (
-                    "FLOAT",
-                    {"default": 8, "min": 1, "step": 1},
+                    "INT",
+                    {"default": 8, "min": 1, "max": 240, "step": 1},
                 ),
                 "loop_count": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
                 "filename_prefix": ("STRING", {"default": "AnimateDiff"}),
                 "format": (["image/gif", "image/webp"] + ffmpeg_formats,),
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_output": ("BOOLEAN", {"default": True}),
+                "s3_prefix": ("STRING", {"default": ""}),
+                "s3_bucket": ("STRING", {"default": "emprops-share"}),
+                "use_s3_upload": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "audio": ("AUDIO",),
@@ -249,6 +274,9 @@ class VideoCombine:
         format="image/gif",
         pingpong=False,
         save_output=True,
+        s3_prefix="",
+        s3_bucket="emprops-share",
+        use_s3_upload=False,
         prompt=None,
         extra_pnginfo=None,
         audio=None,
@@ -564,16 +592,42 @@ class VideoCombine:
         preview = {
                 "filename": file,
                 "subfolder": subfolder,
-                "type": "output" if save_output else "temp",
-                "format": format,
+                "type": "output",
+                "format": get_mime_type(format),
                 "frame_rate": frame_rate,
-                "workflow": first_image_file,
-                "fullpath": output_files[-1],
+                "workflow": first_image_file
             }
-        if num_frames == 1 and 'png' in format and '%03d' in file:
-            previews[0]['format'] = 'image/png'
-            previews[0]['filename'] = file.replace('%03d', '001')
-        return {"ui": {"gifs": [preview]}, "result": ((save_output, output_files),)}
+        logger.info(f"Preview data being sent: {preview}")
+        logger.info(f"Original format: {format}, Converted MIME type: {get_mime_type(format)}")
+        logger.info(f"Output file path: {output_files[-1]}")
+        logger.info(f"File exists check: {os.path.exists(output_files[-1])}")
+        previews = [preview]
+        
+        if s3_prefix and use_s3_upload:
+            try:
+                # print(f"[VideoCombine] Attempting to upload files: {output_files}")
+                # Ensure we have valid file paths
+                valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
+                if not valid_files:
+                    # print("[VideoCombine] No valid files found to upload")
+                    return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
+                
+                s3_handler = S3Handler(bucket_name=s3_bucket)
+                upload_results = s3_handler.upload_files(valid_files, s3_prefix)
+                
+                # Add S3 URLs to metadata
+                successful_urls = [url for success, url in upload_results if success]
+                if successful_urls:
+                    # print(f"[VideoCombine] Files uploaded to S3: {successful_urls}")
+                    # Add S3 URLs to preview info
+                    preview["s3_urls"] = successful_urls
+            except Exception as e:
+                # print(f"[VideoCombine] Error uploading to S3: {str(e)}")
+                # print(f"[VideoCombine] Error type: {type(e)}")
+                import traceback
+                # print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
+        
+        return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
     @classmethod
     def VALIDATE_INPUTS(self, format, **kwargs):
         return True
