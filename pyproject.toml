@@ -1,15 +1,15 @@
 [project]
-name = "comfyui-videohelpersuite"
-description = "Nodes related to video workflows"
-version = "1.4.1"
+name = "comfyui-videohelpersuite-s3"
+description = "Video Helper Suite with S3 upload capabilities"
+version = "1.0.0"
 license = { file = "LICENSE" }
-dependencies = ["opencv-python", "imageio-ffmpeg"]
+dependencies = ["opencv-python", "imageio-ffmpeg", "boto3", "python-dotenv"]
 
 [project.urls]
-Repository = "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite"
+Repository = "https://github.com/stakeordie/ComfyUI-VideoHelperSuite"
 
 #  Used by Comfy Registry https://comfyregistry.org
 [tool.comfy]
-PublisherId = "kosinkadink"
-DisplayName = "ComfyUI-VideoHelperSuite"
+PublisherId = "stakeordie"
+DisplayName = "ComfyUI-VideoHelperSuite-S3"
 Icon = ""
