@@ -605,11 +605,11 @@ class VideoCombine:
         
         if s3_prefix and use_s3_upload:
             try:
-                print(f"[VideoCombine] Attempting to upload files: {output_files}")
+                # print(f"[VideoCombine] Attempting to upload files: {output_files}")
                 # Ensure we have valid file paths
                 valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
                 if not valid_files:
-                    print("[VideoCombine] No valid files found to upload")
+                    # print("[VideoCombine] No valid files found to upload")
                     return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
                 
                 s3_handler = S3Handler(bucket_name=s3_bucket)
@@ -618,14 +618,14 @@ class VideoCombine:
                 # Add S3 URLs to metadata
                 successful_urls = [url for success, url in upload_results if success]
                 if successful_urls:
-                    print(f"[VideoCombine] Files uploaded to S3: {successful_urls}")
+                    # print(f"[VideoCombine] Files uploaded to S3: {successful_urls}")
                     # Add S3 URLs to preview info
                     preview["s3_urls"] = successful_urls
             except Exception as e:
-                print(f"[VideoCombine] Error uploading to S3: {str(e)}")
-                print(f"[VideoCombine] Error type: {type(e)}")
+                # print(f"[VideoCombine] Error uploading to S3: {str(e)}")
+                # print(f"[VideoCombine] Error type: {type(e)}")
                 import traceback
-                print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
+                # print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
         
         return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
     @classmethod

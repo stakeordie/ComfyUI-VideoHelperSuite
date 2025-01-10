@@ -85,12 +85,13 @@ class S3Handler:
             except Exception as e:
                 if attempt < max_attempts - 1:
                     print(f"[S3Handler] Waiting for S3 file to be available... attempt {attempt + 1}/{max_attempts}")
-                    print(f"[S3Handler] Last error: {str(e)}")
+                    # print(f"[S3Handler] Last error: {str(e)}")
+                    last_error = e
                     time.sleep(delay)
                 else:
                     print(f"[S3Handler] Could not verify S3 upload after {max_attempts} attempts")
-                    print(f"[S3Handler] Final error: {str(e)}")
-                    return False
+                    # print(f"[S3Handler] Final error: {str(e)}")
+                    raise e
         return False
 
     def upload_file(self, file_path: str, s3_prefix: Optional[str] = None, index: Optional[int] = None) -> Tuple[bool, str]:
@@ -147,7 +148,7 @@ class S3Handler:
             
             return True, url
         except Exception as e:
-            print(f"[S3Handler] Error uploading {file_path} to S3: {str(e)}")
+            # print(f"[S3Handler] Error uploading {file_path} to S3: {str(e)}")
             return False, str(e)
 
     def upload_files(self, file_paths: List[str], s3_prefix: Optional[str] = None) -> List[Tuple[bool, str]]:
