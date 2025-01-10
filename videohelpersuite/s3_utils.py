@@ -71,6 +71,23 @@ class S3Handler:
             region_name=region
         )
 
+    def verify_s3_upload(self, bucket: str, key: str, max_attempts: int = 5, delay: float = 1) -> bool:
+        """Verify that a file exists in S3 by checking with head_object"""
+        import time
+        
+        for attempt in range(max_attempts):
+            try:
+                self.s3_client.head_object(Bucket=bucket, Key=key)
+                return True
+            except Exception as e:
+                if attempt < max_attempts - 1:
+                    print(f"[S3Handler] Waiting for S3 file to be available... attempt {attempt + 1}/{max_attempts}")
+                    time.sleep(delay)
+                else:
+                    print(f"[S3Handler] Warning: Could not verify S3 upload: {str(e)}")
+                    return False
+        return False
+
     def upload_file(self, file_path: str, s3_prefix: Optional[str] = None, index: Optional[int] = None) -> Tuple[bool, str]:
         """
         Upload a file to S3 bucket
@@ -112,6 +129,10 @@ class S3Handler:
                 Bucket=self.bucket_name,
                 Key=s3_key
             )
+            
+            # Verify the upload
+            if not self.verify_s3_upload(self.bucket_name, s3_key):
+                return False, f"Failed to verify upload of {s3_key}"
             
             # Generate the URL
             url = f"https://{self.bucket_name}.s3.amazonaws.com/{s3_key}"
