@@ -593,8 +593,7 @@ class VideoCombine:
                 "type": "output",
                 "format": format,
                 "frame_rate": frame_rate,
-                "workflow": first_image_file,
-                "fullpath": output_files[-1],
+                "workflow": first_image_file
             }
         logger.info(f"Preview data being sent: {preview}")
         logger.info(f"Original format: {format}, Converted MIME type: {get_mime_type(format)}")
