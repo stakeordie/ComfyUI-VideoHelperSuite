@@ -591,7 +591,7 @@ class VideoCombine:
                 "filename": file,
                 "subfolder": subfolder,
                 "type": "output",
-                "format": format,
+                "format": get_mime_type(format),
                 "frame_rate": frame_rate,
                 "workflow": first_image_file
             }
