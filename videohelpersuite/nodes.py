@@ -610,7 +610,7 @@ class VideoCombine:
                 valid_files = [f for f in output_files if isinstance(f, str) and os.path.exists(f)]
                 if not valid_files:
                     print("[VideoCombine] No valid files found to upload")
-                    return {"ui": {"images": previews}, "result": ((save_output, output_files),)}
+                    return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
                 
                 s3_handler = S3Handler(bucket_name=s3_bucket)
                 upload_results = s3_handler.upload_files(valid_files, s3_prefix)
@@ -627,7 +627,7 @@ class VideoCombine:
                 import traceback
                 print(f"[VideoCombine] Traceback: {traceback.format_exc()}")
         
-        return {"ui": {"images": previews}, "result": ((save_output, output_files),)}
+        return {"ui": {"gifs": previews}, "result": ((save_output, output_files),)}
     @classmethod
     def VALIDATE_INPUTS(self, format, **kwargs):
         return True
