@@ -244,6 +244,7 @@ class VideoCombine:
                 "save_output": ("BOOLEAN", {"default": True}),
                 "s3_prefix": ("STRING", {"default": ""}),
                 "s3_bucket": ("STRING", {"default": "emprops-share"}),
+                "use_s3_upload": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "audio": ("AUDIO",),
@@ -275,6 +276,7 @@ class VideoCombine:
         save_output=True,
         s3_prefix="",
         s3_bucket="emprops-share",
+        use_s3_upload=False,
         prompt=None,
         extra_pnginfo=None,
         audio=None,
@@ -601,7 +603,7 @@ class VideoCombine:
         logger.info(f"File exists check: {os.path.exists(output_files[-1])}")
         previews = [preview]
         
-        if s3_prefix:
+        if s3_prefix and use_s3_upload:
             try:
                 print(f"[VideoCombine] Attempting to upload files: {output_files}")
                 # Ensure we have valid file paths
