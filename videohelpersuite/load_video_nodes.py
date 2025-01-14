@@ -364,8 +364,9 @@ class LoadVideoUpload:
         return {"required": {
                     "source_type": (["upload", "s3", "public_download"],),
                     "video": (sorted(files),),
-                    "s3_key": ("STRING", {"default": "", "placeholder": "S3 path or public URL"}),
+                    "s3_key": ("STRING", {"default": "", "placeholder": "S3 path"}),
                     "s3_bucket": ("STRING", {"default": "emprops-share"}),
+                    "url": ("STRING", {"default": "", "placeholder": "https://example.com/video.mp4"}),
                     "force_rate": ("INT", {"default": 0, "min": 0, "max": 60, "step": 1}),
                     "force_size": (["Disabled", "Custom Height", "Custom Width", "Custom", "256x?", "?x256", "256x256", "512x?", "?x512", "512x512"],),
                     "custom_width": ("INT", {"default": 512, "min": 0, "max": DIMMAX, "step": 8}),
@@ -394,9 +395,9 @@ class LoadVideoUpload:
         if kwargs['source_type'] == 'upload':
             video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
         elif kwargs['source_type'] == 'public_download':
-            video_path = try_download_video(kwargs['s3_key'])
+            video_path = try_download_video(kwargs['url'])
             if not video_path:
-                raise Exception(f"Failed to download video from URL: {kwargs['s3_key']}")
+                raise Exception(f"Failed to download video from URL: {kwargs['url']}")
         else:  # s3
             s3_key = kwargs['s3_key']
             if not s3_key:  # No key provided
@@ -420,6 +421,7 @@ class LoadVideoUpload:
         kwargs.pop('source_type', None)
         kwargs.pop('s3_key', None)
         kwargs.pop('s3_bucket', None)
+        kwargs.pop('url', None)
         kwargs['video'] = video_path
         
         return load_video(**kwargs)
@@ -429,6 +431,8 @@ class LoadVideoUpload:
         if kwargs.get('source_type') == 'upload':
             image_path = folder_paths.get_annotated_filepath(video)
             return calculate_file_hash(image_path)
+        elif kwargs.get('source_type') == 'public_download':
+            return kwargs.get('url', '')
         return kwargs.get('s3_key', '') + kwargs.get('s3_bucket', '')
 
     @classmethod
@@ -437,9 +441,9 @@ class LoadVideoUpload:
             if not folder_paths.exists_annotated_filepath(video):
                 return "Invalid video file: {}".format(video)
         elif kwargs.get('source_type') == 'public_download':
-            if not kwargs.get('s3_key'):
+            if not kwargs.get('url'):
                 return "URL is required for public download"
-            if not is_url(kwargs.get('s3_key')):
+            if not is_url(kwargs.get('url')):
                 return "Invalid URL format"
         else:  # s3
             if not kwargs.get('s3_key'):
