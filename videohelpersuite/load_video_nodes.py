@@ -362,9 +362,9 @@ class LoadVideoUpload:
                 if len(file_parts) > 1 and (file_parts[-1].lower() in video_extensions):
                     files.append(f)
         return {"required": {
-                    "source_type": (["upload", "s3"],),
+                    "source_type": (["upload", "s3", "public_download"],),
                     "video": (sorted(files),),
-                    "s3_key": ("STRING", {"default": "", "placeholder": "folder/video.mp4 or https://your-url/video.mp4"}),
+                    "s3_key": ("STRING", {"default": "", "placeholder": "S3 path or public URL"}),
                     "s3_bucket": ("STRING", {"default": "emprops-share"}),
                     "force_rate": ("INT", {"default": 0, "min": 0, "max": 60, "step": 1}),
                     "force_size": (["Disabled", "Custom Height", "Custom Width", "Custom", "256x?", "?x256", "256x256", "512x?", "?x512", "512x512"],),
@@ -393,15 +393,19 @@ class LoadVideoUpload:
     def load_video(self, **kwargs):
         if kwargs['source_type'] == 'upload':
             video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
+        elif kwargs['source_type'] == 'public_download':
+            video_path = try_download_video(kwargs['s3_key'])
+            if not video_path:
+                raise Exception(f"Failed to download video from URL: {kwargs['s3_key']}")
         else:  # s3
             s3_key = kwargs['s3_key']
-            if is_url(s3_key):
-                # Handle as direct URL
+            if not s3_key:  # No key provided
+                video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
+            elif is_url(s3_key):  # URL provided
                 video_path = try_download_video(s3_key)
                 if not video_path:
                     raise Exception(f"Failed to download video from URL: {s3_key}")
-            else:
-                # Handle as S3 path
+            else:  # S3 path provided
                 from .s3_utils import S3Handler
                 s3_handler = S3Handler(kwargs.get('s3_bucket'))
                 temp_dir = folder_paths.get_temp_directory()
@@ -432,6 +436,11 @@ class LoadVideoUpload:
         if kwargs.get('source_type') == 'upload':
             if not folder_paths.exists_annotated_filepath(video):
                 return "Invalid video file: {}".format(video)
+        elif kwargs.get('source_type') == 'public_download':
+            if not kwargs.get('s3_key'):
+                return "URL is required for public download"
+            if not is_url(kwargs.get('s3_key')):
+                return "Invalid URL format"
         else:  # s3
             if not kwargs.get('s3_key'):
                 return "S3 key is required when using S3 source"
