@@ -84,29 +84,47 @@ if gifski_path is None:
         gifski_path = shutil.which("gifski")
 ytdl_path = os.environ.get("VHS_YTDL", None) or shutil.which('yt-dlp') \
         or shutil.which('youtube-dl')
+wget_path = shutil.which('wget')
+curl_path = shutil.which('curl')
 download_history = {}
 def try_download_video(url):
-    if ytdl_path is None:
-        return None
     if url in download_history:
         return download_history[url]
+    
     os.makedirs(folder_paths.get_temp_directory(), exist_ok=True)
-    #Format information could be added to only download audio for Load Audio,
-    #but this gets hairy if same url is also used for video.
-    #Best to just always keep defaults
-    #dl_format = ['-f', 'ba'] if is_audio else []
-    try:
-        res = subprocess.run([ytdl_path, "--print", "after_move:filepath",
-                              "-P", folder_paths.get_temp_directory(), url],
-                             capture_output=True, check=True)
-        #strip newline
-        file = res.stdout.decode(*ENCODE_ARGS)[:-1]
-    except subprocess.CalledProcessError as e:
-        raise Exception("An error occurred in the yt-dl process:\n" \
-                + e.stderr.decode(*ENCODE_ARGS))
-        file = None
-    download_history[url] = file
-    return file
+    output_file = os.path.join(folder_paths.get_temp_directory(), os.path.basename(url))
+    
+    # Try direct download first using wget or curl
+    if wget_path:
+        try:
+            subprocess.run([wget_path, "-O", output_file, url], 
+                         capture_output=True, check=True)
+            download_history[url] = output_file
+            return output_file
+        except subprocess.CalledProcessError as e:
+            logger.warn(f"wget download failed: {e.stderr.decode(*ENCODE_ARGS)}")
+    elif curl_path:
+        try:
+            subprocess.run([curl_path, "-L", "-o", output_file, url],
+                         capture_output=True, check=True)
+            download_history[url] = output_file
+            return output_file
+        except subprocess.CalledProcessError as e:
+            logger.warn(f"curl download failed: {e.stderr.decode(*ENCODE_ARGS)}")
+    
+    # Fall back to yt-dlp/youtube-dl for video platform URLs
+    if ytdl_path is not None:
+        try:
+            res = subprocess.run([ytdl_path, "--print", "after_move:filepath",
+                                "-P", folder_paths.get_temp_directory(), url],
+                               capture_output=True, check=True)
+            file = res.stdout.decode(*ENCODE_ARGS)[:-1]
+            download_history[url] = file
+            return file
+        except subprocess.CalledProcessError as e:
+            raise Exception("Failed to download video. Error:\n" + e.stderr.decode(*ENCODE_ARGS))
+    
+    raise Exception("No suitable download tool found (wget, curl, or yt-dlp/youtube-dl)")
 
 def is_safe_path(path):
     if "VHS_STRICT_PATHS" not in os.environ:
