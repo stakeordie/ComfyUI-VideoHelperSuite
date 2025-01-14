@@ -364,7 +364,7 @@ class LoadVideoUpload:
         return {"required": {
                     "source_type": (["upload", "s3"],),
                     "video": (sorted(files),),
-                    "s3_key": ("STRING", {"default": "", "placeholder": "path/to/video.mp4"}),
+                    "s3_key": ("STRING", {"default": "", "placeholder": "folder/video.mp4 or https://your-url/video.mp4"}),
                     "s3_bucket": ("STRING", {"default": "emprops-share"}),
                     "force_rate": ("INT", {"default": 0, "min": 0, "max": 60, "step": 1}),
                     "force_size": (["Disabled", "Custom Height", "Custom Width", "Custom", "256x?", "?x256", "256x256", "512x?", "?x512", "512x512"],),
@@ -394,15 +394,23 @@ class LoadVideoUpload:
         if kwargs['source_type'] == 'upload':
             video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
         else:  # s3
-            from .s3_utils import S3Handler
-            s3_handler = S3Handler(kwargs.get('s3_bucket'))
-            temp_dir = folder_paths.get_temp_directory()
-            os.makedirs(temp_dir, exist_ok=True)
-            video_name = os.path.basename(kwargs['s3_key'])
-            video_path = os.path.join(temp_dir, video_name)
-            success, error = s3_handler.download_file(kwargs['s3_key'], video_path)
-            if not success:
-                raise Exception(f"Failed to download video from S3: {error}")
+            s3_key = kwargs['s3_key']
+            if is_url(s3_key):
+                # Handle as direct URL
+                video_path = try_download_video(s3_key)
+                if not video_path:
+                    raise Exception(f"Failed to download video from URL: {s3_key}")
+            else:
+                # Handle as S3 path
+                from .s3_utils import S3Handler
+                s3_handler = S3Handler(kwargs.get('s3_bucket'))
+                temp_dir = folder_paths.get_temp_directory()
+                os.makedirs(temp_dir, exist_ok=True)
+                video_name = os.path.basename(s3_key)
+                video_path = os.path.join(temp_dir, video_name)
+                success, error = s3_handler.download_file(s3_key, video_path)
+                if not success:
+                    raise Exception(f"Failed to download video from S3: {error}")
         
         # Remove source-specific parameters before passing to load_video
         kwargs.pop('source_type', None)
