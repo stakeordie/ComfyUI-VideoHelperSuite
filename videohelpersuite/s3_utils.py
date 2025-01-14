@@ -164,3 +164,23 @@ class S3Handler:
             
         return [self.upload_file(file_path, s3_prefix, index=i if len(file_paths) > 1 else None) 
                 for i, file_path in enumerate(file_paths)]
+
+    def download_file(self, s3_key: str, local_path: str, bucket: Optional[str] = None) -> Tuple[bool, str]:
+        """
+        Download a file from S3 bucket
+        
+        Args:
+            s3_key: Key (path) of the file in S3
+            local_path: Local path to save the file to
+            bucket: Optional bucket name (defaults to self.bucket_name)
+            
+        Returns:
+            Tuple of (success: bool, error_message: str)
+        """
+        try:
+            bucket = bucket or self.bucket_name
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            self.s3_client.download_file(bucket, s3_key, local_path)
+            return True, ""
+        except Exception as e:
+            return False, str(e)
