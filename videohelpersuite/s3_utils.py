@@ -1,5 +1,6 @@
 import os
 import boto3
+import mimetypes
 from typing import Optional, Tuple, List
 from dotenv import load_dotenv
 
@@ -127,11 +128,30 @@ class S3Handler:
             
             # print(f"[S3Handler] Uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
             
+            # Determine content type from file extension
+            ext = os.path.splitext(s3_key)[1].lower()
+            format_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+                '.tiff': 'image/tiff',
+                '.bmp': 'image/bmp',
+                '.mp4': 'video/mp4',
+                '.mov': 'video/quicktime',
+                '.avi': 'video/x-msvideo',
+                '.webm': 'video/webm'
+            }
+            content_type = format_map.get(ext, mimetypes.guess_type(s3_key)[0] or 'application/octet-stream')
+            print(f"[EmProps] Uploading with content type: {content_type}", flush=True)
+            
             # Upload the file
             self.s3_client.upload_file(
                 Filename=file_path,
                 Bucket=self.bucket_name,
-                Key=s3_key
+                Key=s3_key,
+                ExtraArgs={'ContentType': content_type}
             )
             # print(f"[S3Handler] Upload completed, verifying...")
             
