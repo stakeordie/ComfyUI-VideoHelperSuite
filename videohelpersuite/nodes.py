@@ -24,7 +24,9 @@ from .utils import ffmpeg_path, get_audio, hash_path, validate_path, requeue_wor
         gifski_path, calculate_file_hash, strip_path, try_download_video, is_url, \
         imageOrLatent, BIGMAX, merge_filter_args, ENCODE_ARGS
 from comfy.utils import ProgressBar
-from .s3_utils import S3Handler
+from .s3_utils import S3Handler  # For backward compatibility
+# Added: 2025-04-24T20:10:00-04:00 - Provider-agnostic cloud storage support
+from .cloud_storage_utils import CloudStorageHandler, AWS_AVAILABLE, GCS_AVAILABLE, AZURE_AVAILABLE
 
 MIME_TYPE_MAPPING = {
     # Video formats
@@ -230,6 +232,18 @@ class VideoCombine:
     @classmethod
     def INPUT_TYPES(s):
         ffmpeg_formats = get_video_formats()
+        
+        # Determine available cloud providers based on imports
+        # Added: 2025-04-24T20:10:00-04:00 - Provider-agnostic cloud storage support
+        providers = ["aws"]
+        logger.debug(f"Cloud provider availability: AWS={AWS_AVAILABLE}, GCS={GCS_AVAILABLE}, Azure={AZURE_AVAILABLE}")
+        if GCS_AVAILABLE:
+            providers.append("google")
+            logger.debug("Added 'google' to providers list")
+        if AZURE_AVAILABLE:
+            providers.append("azure")
+            logger.debug("Added 'azure' to providers list")
+        
         return {
             "required": {
                 "images": (imageOrLatent,),
@@ -242,9 +256,10 @@ class VideoCombine:
                 "format": (["image/gif", "image/webp"] + ffmpeg_formats,),
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_output": ("BOOLEAN", {"default": True}),
-                "s3_prefix": ("STRING", {"default": ""}),
-                "s3_bucket": ("STRING", {"default": "emprops-share"}),
-                "use_s3_upload": ("BOOLEAN", {"default": False}),
+                "cloud_prefix": ("STRING", {"default": ""}),  # Renamed from s3_prefix
+                "cloud_bucket": ("STRING", {"default": "emprops-share"}),  # Renamed from s3_bucket
+                "use_cloud_upload": ("BOOLEAN", {"default": False}),  # Renamed from use_s3_upload
+                "cloud_provider": (providers,),  # Added provider selection
             },
             "optional": {
                 "audio": ("AUDIO",),
@@ -274,9 +289,10 @@ class VideoCombine:
         format="image/gif",
         pingpong=False,
         save_output=True,
-        s3_prefix="",
-        s3_bucket="emprops-share",
-        use_s3_upload=False,
+        cloud_prefix="",  # Renamed from s3_prefix
+        cloud_bucket="emprops-share",  # Renamed from s3_bucket
+        use_cloud_upload=False,  # Renamed from use_s3_upload
+        cloud_provider="aws",  # Added provider selection
         prompt=None,
         extra_pnginfo=None,
         audio=None,
@@ -609,34 +625,40 @@ class VideoCombine:
         logger.info(f"File exists check: {os.path.exists(output_files[-1])}")
         previews = [preview]
 
-        if s3_prefix and use_s3_upload:
+        # Added: 2025-04-24T20:10:00-04:00 - Provider-agnostic cloud storage support
+        if cloud_prefix and use_cloud_upload:
             try:
                 # Only upload the video file (not the PNG thumbnail)
                 video_file = output_files[-1]  # Last file is the video
                 if isinstance(video_file, str) and os.path.exists(video_file):
-                    s3_handler = S3Handler(bucket_name=s3_bucket)
-                    logger.info(f"[VideoCombine] Attempting to upload file: {video_file}")
+                    # Use provider-agnostic cloud storage handler
+                    cloud_handler = CloudStorageHandler(provider=cloud_provider, bucket_name=cloud_bucket)
+                    logger.info(f"[VideoCombine] Attempting to upload file: {video_file} to {cloud_provider}")
                     
                     # Use exact filename from input
-                    s3_filename = os.path.basename(filename_prefix)
+                    cloud_filename = os.path.basename(filename_prefix)
                     # If filename doesn't have extension, add it from format
-                    if '.' not in s3_filename:
+                    if '.' not in cloud_filename:
                         ext = video_file.split('.')[-1]
-                        s3_filename = f"{s3_filename}.{ext}"
-                    logger.info(f"[VideoCombine] Using S3 filename: {s3_filename}")
+                        cloud_filename = f"{cloud_filename}.{ext}"
+                    logger.info(f"[VideoCombine] Using cloud filename: {cloud_filename}")
                     
-                    success, url = s3_handler.upload_file(
+                    success, url = cloud_handler.upload_file(
                         file_path=video_file,
-                        s3_prefix=s3_prefix,
-                        target_name=s3_filename
+                        prefix=cloud_prefix,
+                        target_name=cloud_filename
                     )
                     if success:
-                        preview["s3_urls"] = [url]
-                        logger.info(f"[VideoCombine] File uploaded successfully to S3: {url}")
+                        # Store URL in preview for UI display
+                        preview["cloud_urls"] = [url]
+                        # For backward compatibility
+                        if cloud_provider == "aws":
+                            preview["s3_urls"] = [url]
+                        logger.info(f"[VideoCombine] File uploaded successfully to {cloud_provider}: {url}")
                     else:
-                        logger.error(f"[VideoCombine] Failed to upload to S3: {url}")
+                        logger.error(f"[VideoCombine] Failed to upload to {cloud_provider}: {url}")
             except Exception as e:
-                logger.error(f"[VideoCombine] Error uploading to S3: {str(e)}")
+                logger.error(f"[VideoCombine] Error uploading to {cloud_provider}: {str(e)}")
                 logger.error(f"[VideoCombine] Error type: {type(e)}")
                 import traceback
                 logger.error(f"[VideoCombine] Traceback: {traceback.format_exc()}")
