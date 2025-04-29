@@ -16,6 +16,9 @@ from .logger import logger
 from .utils import BIGMAX, DIMMAX, calculate_file_hash, get_sorted_dir_files_from_directory,\
         lazy_get_audio, hash_path, validate_path, strip_path, try_download_video,  \
         is_url, imageOrLatent, ffmpeg_path, ENCODE_ARGS
+from .s3_utils import S3Handler  # For backward compatibility
+# Added: 2025-04-29T18:45:00-04:00 - Provider-agnostic cloud storage support
+from .cloud_storage_utils import CloudStorageHandler, AWS_AVAILABLE, GCS_AVAILABLE, AZURE_AVAILABLE
 
 
 video_extensions = ['webm', 'mp4', 'mkv', 'gif', 'mov']
@@ -361,11 +364,24 @@ class LoadVideoUpload:
                 file_parts = f.split('.')
                 if len(file_parts) > 1 and (file_parts[-1].lower() in video_extensions):
                     files.append(f)
+        
+        # Determine available cloud providers based on imports
+        # Added: 2025-04-29T18:45:00-04:00 - Provider-agnostic cloud storage support
+        providers = ["aws"]
+        logger.debug(f"Cloud provider availability: AWS={AWS_AVAILABLE}, GCS={GCS_AVAILABLE}, Azure={AZURE_AVAILABLE}")
+        if GCS_AVAILABLE:
+            providers.append("google")
+            logger.debug("Added 'google' to providers list")
+        if AZURE_AVAILABLE:
+            providers.append("azure")
+            logger.debug("Added 'azure' to providers list")
+        
         return {"required": {
-                    "source_type": (["upload", "s3", "public_download"],),
+                    "source_type": (["upload", "cloud", "public_download"],),  # Changed 's3' to 'cloud'
                     "video": (sorted(files),),
-                    "s3_key": ("STRING", {"default": "", "placeholder": "S3 path"}),
-                    "s3_bucket": ("STRING", {"default": "emprops-share"}),
+                    "cloud_key": ("STRING", {"default": "", "placeholder": "Cloud storage path"}),  # Renamed from s3_key
+                    "cloud_bucket": ("STRING", {"default": "emprops-share"}),  # Renamed from s3_bucket
+                    "cloud_provider": (providers,),  # Added provider selection
                     "url": ("STRING", {"default": "", "placeholder": "https://example.com/video.mp4"}),
                     "force_rate": ("INT", {"default": 0, "min": 0, "max": 60, "step": 1}),
                     "force_size": (["Disabled", "Custom Height", "Custom Width", "Custom", "256x?", "?x256", "256x256", "512x?", "?x512", "512x512"],),
@@ -380,7 +396,10 @@ class LoadVideoUpload:
                     "vae": ("VAE",),
                 },
                 "hidden": {
-                    "unique_id": "UNIQUE_ID"
+                    "unique_id": "UNIQUE_ID",
+                    # For backward compatibility
+                    "s3_key": "STRING",
+                    "s3_bucket": "STRING"
                 },
                 }
 
@@ -392,35 +411,77 @@ class LoadVideoUpload:
     FUNCTION = "load_video"
 
     def load_video(self, **kwargs):
+        # Handle backward compatibility
+        # If s3_key and s3_bucket are provided but cloud_key and cloud_bucket are not,
+        # copy values to the new parameters
+        if 's3_key' in kwargs and 'cloud_key' not in kwargs:
+            kwargs['cloud_key'] = kwargs['s3_key']
+            logger.debug(f"Using s3_key for backward compatibility: {kwargs['cloud_key']}")
+        if 's3_bucket' in kwargs and 'cloud_bucket' not in kwargs:
+            kwargs['cloud_bucket'] = kwargs['s3_bucket']
+            logger.debug(f"Using s3_bucket for backward compatibility: {kwargs['cloud_bucket']}")
+        if kwargs['source_type'] == 's3':
+            kwargs['source_type'] = 'cloud'
+            kwargs['cloud_provider'] = 'aws'
+            logger.debug("Converting source_type from 's3' to 'cloud' for backward compatibility")
+        
+        # Handle different source types
         if kwargs['source_type'] == 'upload':
             video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
         elif kwargs['source_type'] == 'public_download':
             video_path = try_download_video(kwargs['url'])
             if not video_path:
                 raise Exception(f"Failed to download video from URL: {kwargs['url']}")
-        else:  # s3
-            s3_key = kwargs['s3_key']
-            if not s3_key:  # No key provided
+        else:  # cloud storage
+            cloud_key = kwargs.get('cloud_key', '')
+            if not cloud_key:  # No key provided
                 video_path = folder_paths.get_annotated_filepath(strip_path(kwargs['video']))
-            elif is_url(s3_key):  # URL provided
-                video_path = try_download_video(s3_key)
+            elif is_url(cloud_key):  # URL provided
+                video_path = try_download_video(cloud_key)
                 if not video_path:
-                    raise Exception(f"Failed to download video from URL: {s3_key}")
-            else:  # S3 path provided
-                from .s3_utils import S3Handler
-                s3_handler = S3Handler(kwargs.get('s3_bucket'))
-                temp_dir = folder_paths.get_temp_directory()
-                os.makedirs(temp_dir, exist_ok=True)
-                video_name = os.path.basename(s3_key)
-                video_path = os.path.join(temp_dir, video_name)
-                success, error = s3_handler.download_file(s3_key, video_path)
-                if not success:
-                    raise Exception(f"Failed to download video from S3: {error}")
+                    raise Exception(f"Failed to download video from URL: {cloud_key}")
+            else:  # Cloud storage path provided
+                provider = kwargs.get('cloud_provider', 'aws')
+                bucket = kwargs.get('cloud_bucket', 'emprops-share')
+                
+                # Use provider-agnostic cloud storage handler
+                logger.debug(f"Using {provider} storage to download {cloud_key} from {bucket}")
+                try:
+                    cloud_handler = CloudStorageHandler(provider=provider, bucket_name=bucket)
+                    temp_dir = folder_paths.get_temp_directory()
+                    os.makedirs(temp_dir, exist_ok=True)
+                    video_name = os.path.basename(cloud_key)
+                    video_path = os.path.join(temp_dir, video_name)
+                    
+                    # For backward compatibility with older workflows
+                    if provider == 'aws':
+                        # Try S3Handler first for backward compatibility
+                        try:
+                            s3_handler = S3Handler(bucket)
+                            success, error = s3_handler.download_file(cloud_key, video_path)
+                            if not success:
+                                raise Exception(error)
+                        except Exception as s3_error:
+                            logger.debug(f"S3Handler failed, falling back to CloudStorageHandler: {str(s3_error)}")
+                            success, error = cloud_handler.download_file(cloud_key, video_path)
+                            if not success:
+                                raise Exception(error)
+                    else:
+                        # Use CloudStorageHandler directly for non-AWS providers
+                        success, error = cloud_handler.download_file(cloud_key, video_path)
+                        if not success:
+                            raise Exception(error)
+                            
+                except Exception as e:
+                    raise Exception(f"Failed to download video from {provider}: {str(e)}")
         
         # Remove source-specific parameters before passing to load_video
         kwargs.pop('source_type', None)
         kwargs.pop('s3_key', None)
         kwargs.pop('s3_bucket', None)
+        kwargs.pop('cloud_key', None)
+        kwargs.pop('cloud_bucket', None)
+        kwargs.pop('cloud_provider', None)
         kwargs.pop('url', None)
         kwargs['video'] = video_path
         
@@ -433,7 +494,12 @@ class LoadVideoUpload:
             return calculate_file_hash(image_path)
         elif kwargs.get('source_type') == 'public_download':
             return kwargs.get('url', '')
-        return kwargs.get('s3_key', '') + kwargs.get('s3_bucket', '')
+        
+        # For cloud storage, use cloud parameters or fall back to s3 parameters for backward compatibility
+        cloud_key = kwargs.get('cloud_key', kwargs.get('s3_key', ''))
+        cloud_bucket = kwargs.get('cloud_bucket', kwargs.get('s3_bucket', ''))
+        cloud_provider = kwargs.get('cloud_provider', 'aws')
+        return f"{cloud_provider}:{cloud_bucket}:{cloud_key}"
 
     @classmethod
     def VALIDATE_INPUTS(s, video, force_size, **kwargs):
@@ -445,9 +511,11 @@ class LoadVideoUpload:
                 return "URL is required for public download"
             if not is_url(kwargs.get('url')):
                 return "Invalid URL format"
-        else:  # s3
-            if not kwargs.get('s3_key'):
-                return "S3 key is required when using S3 source"
+        else:  # cloud storage
+            # Check for cloud_key or fall back to s3_key for backward compatibility
+            cloud_key = kwargs.get('cloud_key', kwargs.get('s3_key', ''))
+            if not cloud_key:
+                return "Cloud storage key is required when using cloud storage source"
         return True
 
 class LoadVideoPath:
