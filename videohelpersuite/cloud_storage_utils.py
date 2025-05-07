@@ -339,6 +339,53 @@ class CloudStorageHandler:
                     return False
         return False
     
+    def download_file(self, key: str, local_path: str) -> Tuple[bool, str]:
+        """
+        Download a file from cloud storage.
+        
+        Args:
+            key: The object key/path in cloud storage
+            local_path: Local path where the file should be saved
+            
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        # Updated: 2025-05-07T16:59:30-04:00 - Added download_file method
+        try:
+            log_debug(f"Downloading {self.provider}://{self.bucket_name}/{key} to {local_path}")
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+            
+            # Download based on provider
+            if self.provider == 'aws' and self.aws_handler:
+                self.aws_handler.download_file(self.bucket_name, key, local_path)
+                return True, ""
+                
+            elif self.provider == 'google' and self.gcs_handler:
+                bucket = self.gcs_handler.bucket(self.bucket_name)
+                blob = bucket.blob(key)
+                blob.download_to_filename(local_path)
+                return True, ""
+                
+            elif self.provider == 'azure' and self.azure_handler:
+                # Get blob client
+                blob_client = self.azure_handler['container_client'].get_blob_client(key)
+                
+                # Download the blob
+                with open(local_path, "wb") as download_file:
+                    download_file.write(blob_client.download_blob().readall())
+                return True, ""
+                
+            else:
+                return False, f"No handler available for provider: {self.provider}"
+                
+        except Exception as e:
+            error_msg = f"Error downloading file: {str(e)}"
+            log_debug(error_msg)
+            log_debug(traceback.format_exc())
+            return False, error_msg
+    
     def upload_file(self, file_path: str, prefix: Optional[str] = None, index: Optional[int] = None, target_name: Optional[str] = None) -> Tuple[bool, str]:
         """
         Upload a file to cloud storage.
