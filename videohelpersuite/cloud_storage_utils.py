@@ -97,8 +97,17 @@ class CloudStorageHandler:
         log_debug(f"Using cloud provider: {self.provider}")
         
         # Check for test mode
-        self.test_mode = os.getenv('STORAGE_TEST_MODE', 'false').lower() == 'true'
-        log_debug(f"Test mode: {self.test_mode}")
+        # Updated: 2025-05-07T15:58:00-04:00 - Use provider-agnostic test container name
+        test_container = os.getenv('CLOUD_STORAGE_TEST_CONTAINER')
+        if test_container and self.provider == 'azure':
+            self.bucket_name = test_container
+            log_debug(f"Using test container from CLOUD_STORAGE_TEST_CONTAINER: {self.bucket_name}")
+        elif os.getenv('STORAGE_TEST_MODE', 'false').lower() == 'true':
+            self.test_mode = True
+            log_debug(f"Test mode: {self.test_mode}")
+        else:
+            self.test_mode = False
+            log_debug(f"Test mode: {self.test_mode}")
         
         # Initialize provider-specific handlers
         self.aws_handler = None
@@ -242,18 +251,29 @@ class CloudStorageHandler:
         """Initialize Azure Blob Storage handler"""
         log_debug("Initializing Azure Blob Storage handler")
         
-        # Get credentials from environment - support both provider-specific and provider-agnostic variables
-        # Added: 2025-05-07T15:21:00-04:00 - Support for provider-agnostic environment variables
-        account_name = os.getenv('STORAGE_ACCOUNT_NAME') or os.getenv('AZURE_STORAGE_ACCOUNT')
-        account_key = os.getenv('STORAGE_ACCOUNT_KEY') or os.getenv('AZURE_STORAGE_KEY')
-        container_name = os.getenv('STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', self.bucket_name)
+        # Get credentials from environment - use Azure-specific variables
+        # Updated: 2025-05-07T15:57:00-04:00 - Use provider-specific variables with container-agnostic names
+        account_name = os.getenv('AZURE_STORAGE_ACCOUNT')
+        account_key = os.getenv('AZURE_STORAGE_KEY')
+        
+        # For container name, check provider-agnostic first, then fall back
+        container_name = None
+        if self.bucket_name:
+            container_name = self.bucket_name
+        else:
+            # Check for provider-agnostic container name
+            container_name = os.getenv('CLOUD_STORAGE_CONTAINER')
+            if not container_name:
+                # Fall back to Azure-specific container name
+                container_name = os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
         
         # Validate credentials
         if not all([account_name, account_key]):
             missing = []
-            if not account_name: missing.append('STORAGE_ACCOUNT_NAME/AZURE_STORAGE_ACCOUNT')
-            if not account_key: missing.append('STORAGE_ACCOUNT_KEY/AZURE_STORAGE_KEY')
-            raise ValueError(f"Missing required Azure environment variables: {', '.join(missing)}")
+            # Updated: 2025-05-07T15:57:30-04:00 - Focus on Azure-specific variables
+            if not account_name: missing.append('AZURE_STORAGE_ACCOUNT')
+            if not account_key: missing.append('AZURE_STORAGE_KEY')
+            raise ValueError(f"Missing required Azure environment variables: {', '.join(missing)}. Please set these in your .env file or environment.")
         
         # Initialize Azure Blob Service client
         connection_string = f"DefaultEndpointsProtocol=https;AccountName={account_name};AccountKey={account_key};EndpointSuffix=core.windows.net"
