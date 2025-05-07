@@ -252,7 +252,7 @@ class CloudStorageHandler:
         log_debug("Initializing Azure Blob Storage handler")
         
         # Get credentials from environment - use Azure-specific variables
-        # Updated: 2025-05-07T15:57:00-04:00 - Use provider-specific variables with container-agnostic names
+        # Updated: 2025-05-07T17:10:00-04:00 - Load environment variables from .env files
         account_name = os.getenv('AZURE_STORAGE_ACCOUNT')
         account_key = os.getenv('AZURE_STORAGE_KEY')
         
@@ -266,6 +266,71 @@ class CloudStorageHandler:
             if not container_name:
                 # Fall back to Azure-specific container name
                 container_name = os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
+        
+        # If credentials not found, try loading from .env and .env.local files
+        if not account_name or not account_key:
+            # Try to find the module directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            module_dir = os.path.dirname(current_dir)  # Go up one level to the module root
+            
+            # First try .env in the module directory
+            env_path = os.path.join(module_dir, '.env')
+            if os.path.exists(env_path):
+                log_debug(f"Loading environment variables from: {env_path}")
+                load_dotenv(env_path)
+                account_name = account_name or os.getenv('AZURE_STORAGE_ACCOUNT')
+                account_key = account_key or os.getenv('AZURE_STORAGE_KEY')
+                if not container_name:
+                    container_name = os.getenv('CLOUD_STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
+            
+            # Then try .env.local in the module directory
+            env_local_path = os.path.join(module_dir, '.env.local')
+            if os.path.exists(env_local_path):
+                log_debug(f"Loading environment variables from: {env_local_path}")
+                load_dotenv(env_local_path)
+                account_name = account_name or os.getenv('AZURE_STORAGE_ACCOUNT')
+                account_key = account_key or os.getenv('AZURE_STORAGE_KEY')
+                if not container_name:
+                    container_name = os.getenv('CLOUD_STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
+            
+            # Also try the parent directory of the module (the custom_nodes directory)
+            parent_dir = os.path.dirname(module_dir)
+            emprops_dir = os.path.join(parent_dir, 'emprops_comfy_nodes')
+            
+            if os.path.exists(emprops_dir):
+                # Try .env in the emprops directory
+                emprops_env_path = os.path.join(emprops_dir, '.env')
+                if os.path.exists(emprops_env_path):
+                    log_debug(f"Loading environment variables from EmProps: {emprops_env_path}")
+                    load_dotenv(emprops_env_path)
+                    account_name = account_name or os.getenv('AZURE_STORAGE_ACCOUNT')
+                    account_key = account_key or os.getenv('AZURE_STORAGE_KEY')
+                    if not container_name:
+                        container_name = os.getenv('CLOUD_STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
+                
+                # Try .env.local in the emprops directory
+                emprops_env_local_path = os.path.join(emprops_dir, '.env.local')
+                if os.path.exists(emprops_env_local_path):
+                    log_debug(f"Loading environment variables from EmProps: {emprops_env_local_path}")
+                    load_dotenv(emprops_env_local_path)
+                    account_name = account_name or os.getenv('AZURE_STORAGE_ACCOUNT')
+                    account_key = account_key or os.getenv('AZURE_STORAGE_KEY')
+                    if not container_name:
+                        container_name = os.getenv('CLOUD_STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', 'emprops-share')
+        
+        # Log available environment variables for debugging
+        log_debug("Azure Handler - Available environment variables:")
+        if account_name:
+            log_debug("AZURE_STORAGE_ACCOUNT: Present")
+        else:
+            log_debug("AZURE_STORAGE_ACCOUNT: Missing")
+            
+        if account_key:
+            log_debug("AZURE_STORAGE_KEY: Present")
+        else:
+            log_debug("AZURE_STORAGE_KEY: Missing")
+            
+        log_debug(f"Container name: {container_name}")
         
         # Validate credentials
         if not all([account_name, account_key]):
