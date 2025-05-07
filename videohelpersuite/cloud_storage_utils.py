@@ -88,7 +88,12 @@ class CloudStorageHandler:
         log_debug(f"Initializing CloudStorageHandler with provider={provider}, bucket={bucket_name}")
         
         # Get provider from environment if not specified
+        # Added: 2025-05-07T15:22:00-04:00 - Improved provider detection
         self.provider = provider or os.getenv('CLOUD_PROVIDER', 'aws').lower()
+        # Validate provider
+        if self.provider not in ['aws', 'google', 'azure']:
+            log_debug(f"Warning: Unknown CLOUD_PROVIDER value: {self.provider}, defaulting to 'aws'")
+            self.provider = 'aws'
         log_debug(f"Using cloud provider: {self.provider}")
         
         # Check for test mode
@@ -237,16 +242,17 @@ class CloudStorageHandler:
         """Initialize Azure Blob Storage handler"""
         log_debug("Initializing Azure Blob Storage handler")
         
-        # Get credentials from environment
-        account_name = os.getenv('AZURE_STORAGE_ACCOUNT')
-        account_key = os.getenv('AZURE_STORAGE_KEY')
-        container_name = os.getenv('AZURE_STORAGE_CONTAINER', self.bucket_name)
+        # Get credentials from environment - support both provider-specific and provider-agnostic variables
+        # Added: 2025-05-07T15:21:00-04:00 - Support for provider-agnostic environment variables
+        account_name = os.getenv('STORAGE_ACCOUNT_NAME') or os.getenv('AZURE_STORAGE_ACCOUNT')
+        account_key = os.getenv('STORAGE_ACCOUNT_KEY') or os.getenv('AZURE_STORAGE_KEY')
+        container_name = os.getenv('STORAGE_CONTAINER') or os.getenv('AZURE_STORAGE_CONTAINER', self.bucket_name)
         
         # Validate credentials
         if not all([account_name, account_key]):
             missing = []
-            if not account_name: missing.append('AZURE_STORAGE_ACCOUNT')
-            if not account_key: missing.append('AZURE_STORAGE_KEY')
+            if not account_name: missing.append('STORAGE_ACCOUNT_NAME/AZURE_STORAGE_ACCOUNT')
+            if not account_key: missing.append('STORAGE_ACCOUNT_KEY/AZURE_STORAGE_KEY')
             raise ValueError(f"Missing required Azure environment variables: {', '.join(missing)}")
         
         # Initialize Azure Blob Service client
@@ -384,8 +390,12 @@ class CloudStorageHandler:
                 
             elif self.provider == 'azure' and self.azure_handler:
                 blob_client = self.azure_handler['container_client'].get_blob_client(key)
+                # Use proper ContentSettings object instead of dictionary
+                # Added: 2025-05-07T15:21:30-04:00 - Fix Azure content settings
+                from azure.storage.blob import ContentSettings
+                content_settings = ContentSettings(content_type=content_type)
                 with open(file_path, 'rb') as file_data:
-                    blob_client.upload_blob(file_data, overwrite=True, content_settings={'content_type': content_type})
+                    blob_client.upload_blob(file_data, overwrite=True, content_settings=content_settings)
                 
                 # Verify upload
                 if self.verify_upload(key):
