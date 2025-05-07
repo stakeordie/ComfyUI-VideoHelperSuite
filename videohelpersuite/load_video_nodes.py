@@ -441,7 +441,13 @@ class LoadVideoUpload:
                 if not video_path:
                     raise Exception(f"Failed to download video from URL: {cloud_key}")
             else:  # Cloud storage path provided
-                provider = kwargs.get('cloud_provider', 'aws')
+                # Added: 2025-05-07T15:45:00-04:00 - Support for provider-agnostic environment variables
+                provider = kwargs.get('cloud_provider', os.getenv('CLOUD_PROVIDER', 'aws')).lower()
+                # Validate provider
+                if provider not in ['aws', 'google', 'azure']:
+                    logger.warning(f"Unknown cloud provider: {provider}, defaulting to 'aws'")
+                    provider = 'aws'
+                    
                 bucket = kwargs.get('cloud_bucket', 'emprops-share')
                 
                 # Use provider-agnostic cloud storage handler
