@@ -4,8 +4,10 @@ from typing import Iterable
 import shutil
 import subprocess
 import re
+import time
 from collections.abc import Mapping
 from typing import Union
+import functools
 import torch
 from torch import Tensor
 
@@ -41,10 +43,23 @@ def ffmpeg_suitability(path):
             score += int(copyright_year)
     return score
 
-class ImageOrLatent(str):
+class MultiInput(str):
+    def __new__(cls, string, allowed_types="*"):
+        res = super().__new__(cls, string)
+        res.allowed_types=allowed_types
+        return res
     def __ne__(self, other):
-        return not (other == "IMAGE" or other == "LATENT" or other == "*")
-imageOrLatent = ImageOrLatent("IMAGE")
+        if self.allowed_types == "*" or other == "*":
+            return False
+        return other not in self.allowed_types
+imageOrLatent = MultiInput("IMAGE", ["IMAGE", "LATENT"])
+floatOrInt = MultiInput("FLOAT", ["FLOAT", "INT"])
+
+class ContainsAll(dict):
+    def __contains__(self, other):
+        return True
+    def __getitem__(self, key):
+        return super().get(key, (None, {}))
 
 if "VHS_FORCE_FFMPEG_PATH" in os.environ:
     ffmpeg_path = os.environ.get("VHS_FORCE_FFMPEG_PATH")
@@ -126,8 +141,8 @@ def try_download_video(url):
     
     raise Exception("No suitable download tool found (wget, curl, or yt-dlp/youtube-dl)")
 
-def is_safe_path(path):
-    if "VHS_STRICT_PATHS" not in os.environ:
+def is_safe_path(path, strict=False):
+    if "VHS_STRICT_PATHS" not in os.environ and not strict:
         return True
     basedir = os.path.abspath('.')
     try:
@@ -405,3 +420,23 @@ def select_indexes_from_str(input_obj: Union[Tensor, list], indexes: str, err_if
     if err_if_empty and len(real_idxs) == 0:
         raise Exception(f"Nothing was selected based on indexes found in '{indexes}'.")
     return select_indexes(input_obj, real_idxs)
+
+def hook(obj, attr):
+    def dec(f):
+        f = functools.update_wrapper(f, getattr(obj,attr))
+        setattr(obj,attr,f)
+        return f
+    return dec
+
+def cached(duration):
+    def dec(f):
+        cached_ret = None
+        cache_time = 0
+        def cached_func():
+            nonlocal cache_time, cached_ret
+            if time.time() > cache_time + duration or cached_ret is None:
+                cache_time = time.time()
+                cached_ret = f()
+            return cached_ret
+        return cached_func
+    return dec
